@@ -451,6 +451,11 @@ export const CONFIG = {
     // Mirrors engine load across the top of the dial.
     brakeTemp: { x: 438, y: 68, size: 26.7, anchor: "start", color: "#ff6b6b", opacity: 1, visible: true },
     brakeTempLabel: { x: 438, y: 89, size: 19, anchor: "start", for: "brakeTemp", text: "BRAKE", style: {}, visible: true },
+
+    // ---- Aster AVCP ---------------------------------------------------------
+    // Active Aster cam/profile regime. Hidden automatically when no AVCP data
+    // exists; runtime colours LOW/MID/HIGH while layout owns geometry.
+    avcp: { x: 187, y: 544.4, size: 26.7, anchor: "start", color: "#80d4ff", opacity: 1, visible: true },
   },
 
   // ---------------------------------------------------------------------------

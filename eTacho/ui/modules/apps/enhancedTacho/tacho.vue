@@ -1174,6 +1174,13 @@
         <!-- Hottest brake core, from electrics.wheelThermals. -->
         <text v-show="C.brakeTemp.visible" :x="C.brakeTemp.x" :y="C.brakeTemp.y" :style="styles.brakeTemp">{{ V.brakeTemp }}</text>
 
+        <!-- Aster AVCP profile. Entirely absent on non-Aster vehicles. -->
+        <text
+          v-show="avcpVisible && C.avcp.visible"
+          :x="C.avcp.x"
+          :y="C.avcp.y"
+          :style="[styles.avcp, avcpStyle]">AVCP {{ V.avcpProfile }}</text>
+
         <!-- Structural damage. Positioned on an arc but drawn upright --
              see arcPoint() and the ARC-PLACED section of layout.js. -->
         <text v-show="C.beamsDeformed.visible" :x="arcPoint(C.beamsDeformed).x" :y="arcPoint(C.beamsDeformed).y" :style="sty(C.beamsDeformed)">{{ V.beamsDeformed }}</text>
@@ -1579,6 +1586,89 @@ const gearX = computed(() => C.gear.x + GEAR_SHEAR * C.gear.y)
 
 // Displayed strings. A `U` suffix holds the matching unit, empty when the
 // element has `unit: false`.
+// Aster publishes dashboard-facing state through electrics.values. Normalize
+// those keys here so rendering does not care which protocol alias produced a
+// value, while ordinary BeamNG vehicles remain a clean zero-data case.
+function etPositive(...values) {
+  for (const value of values) {
+    const n = Number(value)
+    if (isFinite(n) && n > 0) return n
+  }
+  return 0
+}
+
+function etFlag(value) {
+  if (value === true) return true
+  if (value === false || value === null || value === undefined || value === "") return false
+  const n = Number(value)
+  if (isFinite(n)) return n > 0
+  return String(value).toLowerCase() === "true"
+}
+
+function etText(...values) {
+  for (const value of values) {
+    if (value === null || value === undefined) continue
+    const s = String(value).trim()
+    if (s) return s
+  }
+  return ""
+}
+
+function readAsterTelemetry(e = {}) {
+  const actualProfile = etText(
+    e.asterEngineProfileActual,
+    e.ediACPProfileActual,
+    e.asterCamProfileActual,
+  ).toUpperCase()
+  const requestedProfile = etText(e.asterEngineProfileRequested).toUpperCase()
+  const profilePresent = etFlag(e.asterEngineProfilePresent) || actualProfile.length > 0
+
+  const limiterRPM = etPositive(e.ediECURevLimitRPM)
+  const displayRedlineRPM = etPositive(e.ediECUDisplayRedlineRPM, limiterRPM)
+  const tachMaxRPM = etPositive(e.ediECUDisplayTachMaxRPM)
+  const hardwareCeilingRPM = etPositive(
+    e.ediECURevHardwareCeilingRPM,
+    e.asterConstructibleEngineSafeRPM,
+  )
+  const hardwareAbsoluteRPM = etPositive(e.ediECURevHardwareAbsoluteRPM)
+
+  return {
+    present:
+      profilePresent ||
+      limiterRPM > 0 ||
+      tachMaxRPM > 0 ||
+      hardwareCeilingRPM > 0 ||
+      hardwareAbsoluteRPM > 0 ||
+      etFlag(e.ediECUProtectionActive),
+    rpm: {
+      limiterRPM,
+      displayRedlineRPM,
+      tachMaxRPM,
+      hardwareCeilingRPM,
+      hardwareAbsoluteRPM,
+    },
+    profile: {
+      present: profilePresent,
+      actual: actualProfile,
+      requested: requestedProfile,
+      load: Number(e.asterEngineProfileLoad) || 0,
+      throttle: Number(e.asterEngineProfileThrottle) || 0,
+      lastSwitchRPM: etPositive(e.asterEngineProfileLastSwitchRPM),
+      lastSwitchReason: etText(e.asterEngineProfileLastSwitchReason),
+    },
+    protection: {
+      active: etFlag(e.ediECUProtectionActive),
+      reason: etText(e.ediECUProtectionReason),
+      coolantC: Number(e.ediECUCoolantC ?? e.watertemp) || 0,
+      oilC: Number(e.ediECUOilC ?? e.oiltemp) || 0,
+      coolantSoftC: Number(e.ediECUCoolantSoftC) || 0,
+      coolantHardC: Number(e.ediECUCoolantHardC) || 0,
+      oilSoftC: Number(e.ediECUOilSoftC) || 0,
+      oilHardC: Number(e.ediECUOilHardC) || 0,
+    },
+  }
+}
+
 const V = reactive({
   weight: "0", weightU: "",
   peakPower: "0", peakPowerU: "",
@@ -1594,12 +1684,19 @@ const V = reactive({
   beamsBroken: "0%",
   engineLoad: "0%",
   brakeTemp: "0",
+  avcpProfile: "",
   // Driver inputs, kept as raw 0..1 fractions: they drive rectangle widths,
   // not text, so formatting them would only throw the precision away.
   throttle: 0,
   brake: 0,
   clutch: 0,
   steering: 0,
+})
+
+const avcpVisible = computed(() => V.avcpProfile.length > 0)
+const avcpStyle = computed(() => {
+  const colors = { LOW: "#80ff89", MID: "#ffeb80", HIGH: "#80d4ff" }
+  return { fill: colors[V.avcpProfile] || C.avcp.color }
 })
 
 // Path for an input gauge's arc, and its length.
@@ -1912,6 +2009,36 @@ function setSpeedUnitText(unitText) {
   setSvgText(speedUnitTextRef.value, next, "speedUnitText")
 }
 
+function etSetRedlineRPM(rawRPM) {
+  const rpm = Number(rawRPM)
+  const max = Number(rpm_max.value)
+  const fraction = isFinite(rpm) && rpm > 0 && isFinite(max) && max > 0
+    ? Math.max(0, Math.min(1, rpm / max))
+    : 1
+
+  setStyleValue(
+    redLineRef.value,
+    "strokeDasharray",
+    redLineLen.value + " " + redLineLen.value,
+    "redLineStrokeDasharray",
+  )
+  setStyleValue(
+    redLineRef.value,
+    "strokeDashoffset",
+    -fraction * redLineLen.value,
+    "redLineStrokeDashoffset",
+  )
+}
+
+function etApplyAsterTelemetry(aster, stockRedlineRPM) {
+  const profile = aster?.profile?.present ? aster.profile.actual : ""
+  const nextProfile = profile ? String(profile).toUpperCase() : ""
+  if (V.avcpProfile !== nextProfile) V.avcpProfile = nextProfile
+
+  const asterRedline = Number(aster?.rpm?.displayRedlineRPM)
+  etSetRedlineRPM(isFinite(asterRedline) && asterRedline > 0 ? asterRedline : stockRedlineRPM)
+}
+
 function applyData(data) {
   let speedText = String(data.speedtext)
   if (speedText == "-Infinity" || speedText == "Infinity") {
@@ -2066,19 +2193,18 @@ function update(streams) {
     // Must be visible before calling getPointAtLength
     setlayersVisible(true)
 
-    // Initialize gauge values using engine max RPM
-    const engineMaxRpm = hasUsableMaxRpm ? rawMaxRpm : (rpm_max.value || 8000)
-    rpm_max.value = computeGaugeFullRange(engineMaxRpm)
+    // Aster may distinguish the visual tach range, current ECU limiter and
+    // hardware ceiling. Stock vehicles still use engineInfo[1].
+    const aster = readAsterTelemetry(streams.electrics)
+    const scaleBasisRPM = aster.rpm.hardwareCeilingRPM || rawMaxRpm
+    const explicitTachMaxRPM = aster.rpm.tachMaxRPM
+    rpm_max.value = explicitTachMaxRPM || computeGaugeFullRange(scaleBasisRPM)
+    const stepRpm = computeGaugeStep(scaleBasisRPM)
 
-    let upshiftRPM_perc = hasUsableMaxRpm ? (rawMaxRpm / rpm_max.value) : 1
-
-    let upshiftRPM2_perc = 1 //((streams.engineInfo[1] - streams.engineInfo[2]) / rpm_max);
-
-    redLineRef.value.style.strokeDasharray = redLineLen.value * upshiftRPM2_perc + " " + redLineLen.value
-    redLineRef.value.style.strokeDashoffset = -upshiftRPM_perc * redLineLen.value
+    etSetRedlineRPM(aster.rpm.displayRedlineRPM || rawMaxRpm)
 
     // compute tick marks (remove first and last)
-    const totalMarks = computeGaugeMarks(engineMaxRpm) // includes 0 and max
+    const totalMarks = Math.ceil(rpm_max.value / stepRpm) + 1 // includes 0 and max
     const interiorMarks = Math.max(0, totalMarks - 2)
     let dashCount = Math.min(interiorMarks, maxRpmTexts)
 
@@ -2089,7 +2215,6 @@ function update(streams) {
     setDisplay(revcurveDashesRef.value, "none", "revcurveDashesDisplay")
 
     // Place labels and ticks; legend/divisor depend on step size
-    const stepRpm = computeGaugeStep(engineMaxRpm)
     if (rpmLegendTextRef?.value) {
       rpmLegendTextRef.value.textContent = stepRpm === 500 ? "x100 RPM" : "x1000 RPM"
     }
@@ -2192,6 +2317,7 @@ function update(streams) {
     data.lowBeam = streams.electrics.lowbeam
     data.highBeam = streams.electrics.highbeam
     data.rpm = (streams.electrics.rpmTacho || 0.0) / rpm_max.value
+    etApplyAsterTelemetry(readAsterTelemetry(streams.electrics), rawMaxRpm)
 
     // ===================== Enhanced Tacho: mod readouts =====================
     // Stored RAW, in base units; conversion happens at display time.
