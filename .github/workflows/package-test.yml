@@ -3,7 +3,8 @@ name: Package AsterTach Test
 on:
   push:
     branches:
-      - feature/aster-avcp-integration
+      - Master
+      - "feature/**"
   workflow_dispatch:
 
 jobs:
