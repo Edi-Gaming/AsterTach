@@ -225,12 +225,26 @@ TPL_NEW = """
         <!-- Hottest brake core, from electrics.wheelThermals. -->
         <text v-show="C.brakeTemp.visible" :x="C.brakeTemp.x" :y="C.brakeTemp.y" :style="styles.brakeTemp">{{ V.brakeTemp }}</text>
 
-        <!-- Aster AVCP profile. Entirely absent on non-Aster vehicles. -->
-        <text
+        <!-- Aster AVCP selector. Entirely absent on non-Aster vehicles.
+             The compact three-state control is deliberately placed in the
+             lower opening rather than consuming another free-form text row. -->
+        <g
           v-show="avcpVisible && C.avcp.visible"
-          :x="C.avcp.x"
-          :y="C.avcp.y"
-          :style="[styles.avcp, avcpStyle]">AVCP {{ V.avcpProfile }}</text>
+          class="aster-avcp-selector"
+          :transform="avcpTransform">
+          <text x="0" y="-23" :style="avcpTitleStyle">AVCP</text>
+          <g v-for="segment in avcpSegments" :key="segment.name">
+            <rect
+              :x="segment.x"
+              y="-14"
+              width="44"
+              height="28"
+              rx="7"
+              ry="7"
+              :style="segment.rectStyle" />
+            <text :x="segment.x + 22" y="7" :style="segment.textStyle">{{ segment.name }}</text>
+          </g>
+        </g>
 
         <!-- Structural damage. Positioned on an arc but drawn upright --
              see arcPoint() and the ARC-PLACED section of layout.js. -->
@@ -657,9 +671,50 @@ const V = reactive({
 })
 
 const avcpVisible = computed(() => V.avcpProfile.length > 0)
-const avcpStyle = computed(() => {
-  const colors = { LOW: "#80ff89", MID: "#ffeb80", HIGH: "#80d4ff" }
-  return { fill: colors[V.avcpProfile] || C.avcp.color }
+
+const AVCP_COLORS = {
+  LOW: "#80ff89",
+  MID: "#ffeb80",
+  HIGH: "#80d4ff",
+}
+
+const avcpTransform = computed(() => {
+  const scale = (Number(C.avcp.size) || 26.7) / 26.7
+  return `translate(${C.avcp.x},${C.avcp.y}) scale(${scale})`
+})
+
+const avcpTitleStyle = computed(() => ({
+  fontSize: "17px",
+  fontFamily: O.font,
+  textAnchor: "middle",
+  fill: "rgba(255,255,255,0.72)",
+  letterSpacing: "1.4px",
+}))
+
+const avcpSegments = computed(() => {
+  const names = ["LOW", "MID", "HIGH"]
+  const xs = [-70, -22, 26]
+  return names.map((name, i) => {
+    const active = V.avcpProfile === name
+    const accent = AVCP_COLORS[name] || C.avcp.color
+    return {
+      name,
+      x: xs[i],
+      rectStyle: {
+        fill: active ? accent : "rgba(5,9,15,0.74)",
+        stroke: active ? accent : "rgba(255,255,255,0.18)",
+        strokeWidth: active ? 1.8 : 1.2,
+        filter: active ? `drop-shadow(0 0 5px ${accent})` : "none",
+      },
+      textStyle: {
+        fontSize: "16px",
+        fontFamily: O.font,
+        textAnchor: "middle",
+        fill: active ? "#071018" : "rgba(255,255,255,0.68)",
+        fontWeight: active ? "700" : "400",
+      },
+    }
+  })
 })
 
 // Path for an input gauge's arc, and its length.

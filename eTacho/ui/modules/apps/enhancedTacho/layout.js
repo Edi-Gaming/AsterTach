@@ -441,7 +441,7 @@ export const CONFIG = {
     // The caption has no colour of its own: `for` points at the readout it
     // labels and it takes that colour, dimmed by its own opacity. Give it a
     // `color` here (or in the settings panel) to break the link.
-    engineLoad: { x: 308, y: 45, size: 26.7, anchor: "start", color: "#80ff89", opacity: 1, visible: true },
+    engineLoad: { x: 308, y: 45, size: 30, anchor: "start", color: "#80ff89", opacity: 1, visible: true },
     engineLoadLabel: { x: 308, y: 65, size: 19, anchor: "start", for: "engineLoad", text: "LOAD", style: {}, visible: true },
 
     // ---- brake temperature --------------------------------------------------
@@ -455,7 +455,7 @@ export const CONFIG = {
     // ---- Aster AVCP ---------------------------------------------------------
     // Active Aster cam/profile regime. Hidden automatically when no AVCP data
     // exists; runtime colours LOW/MID/HIGH while layout owns geometry.
-    avcp: { x: 187, y: 544.4, size: 26.7, anchor: "start", color: "#80d4ff", opacity: 1, visible: true },
+    avcp: { x: 258, y: 555, size: 26.7, anchor: "middle", color: "#80d4ff", opacity: 1, visible: true },
   },
 
   // ---------------------------------------------------------------------------
