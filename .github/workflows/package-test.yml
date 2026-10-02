@@ -1,0 +1,44 @@
+name: Package AsterTach Test
+
+on:
+  push:
+    branches:
+      - feature/aster-avcp-integration
+  workflow_dispatch:
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build BeamNG mod ZIP
+        shell: python
+        run: |
+          import os
+          import zipfile
+
+          src = "eTacho"
+          out = "AsterTach-test.zip"
+          files = []
+          for base, _dirs, names in os.walk(os.path.join(src, "ui")):
+              for name in names:
+                  full = os.path.join(base, name)
+                  arc = os.path.relpath(full, src).replace(os.sep, "/")
+                  files.append((arc, full))
+          files.sort()
+
+          with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
+              for arc, full in files:
+                  z.write(full, arc)
+
+          print(out, len(files), "files")
+
+      - name: Upload test build
+        uses: actions/upload-artifact@v4
+        with:
+          name: AsterTach-test
+          path: AsterTach-test.zip
+          if-no-files-found: error
